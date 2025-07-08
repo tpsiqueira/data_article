@@ -805,7 +805,7 @@ class ThreeWChart:
         title: str = "ThreeW Chart",
         y_axis: str = "P-MON-CKP",
         use_dropdown: bool = False,
-        dropdown_position: tuple = (0.4, 1.4),
+        dropdown_position: tuple = (0.4, 1.4),        
     ):
         """Initializes the ThreeWChart class with the given parameters.
 
@@ -814,13 +814,13 @@ class ThreeWChart:
             title (str, optional): Title of the chart. Defaults to "ThreeW Chart".
             y_axis (str, optional): olumn name to be plotted on the y-axis. Defaults to "P-MON-CKP".
             use_dropdown (bool, optional):  Whether to show a dropdown for selecting the y-axis (default is False). Defaults to False.
-            dropdown_position (tuple, optional): Position of the dropdown button on the chart. Defaults to (0.4, 1.4).
+            dropdown_position (tuple, optional): Position of the dropdown button on the chart. Defaults to (0.4, 1.4).            
         """
         self.file_path: str = file_path
         self.title: str = title
         self.y_axis: str = y_axis
         self.use_dropdown: bool = use_dropdown
-        self.dropdown_position: tuple = dropdown_position
+        self.dropdown_position: tuple = dropdown_position        
 
         self.class_mapping: Dict[int, str] = self._generate_class_mapping()
         self.class_colors: Dict[int, str] = self._generate_class_colors()
@@ -834,13 +834,33 @@ class ThreeWChart:
         return {**LABELS_DESCRIPTIONS, **TRANSIENT_LABELS_DESCRIPTIONS}
 
     def _generate_class_colors(self) -> Dict[int, str]:
-        """Automatically generate a color mapping for event labels using a colormap.
+       """Automatically generate a color mapping for event labels using a colormap.
         For transient states, the color is the event color with lower opacity.
 
         Returns:
             Dict[int, str]: Mapping of event labels to their colors.
         """
-        cmap = plt.get_cmap("tab10")
+        # Define global color mapping for all specific labels
+        global_colors = {
+            # Normal Operation - light green
+            0: "lightgreen",
+            
+            # Steady State labels - red
+            3: "red",
+            6: "red", 
+            8: "red",
+            
+            # Transient Condition labels - yellow
+            106: "yellow",
+            108: "yellow",
+            
+            # State labels - specific colors
+            "state_0": "darkgreen",  # Open
+            "state_1": "gray",       # Shut-In
+            "state_7": "magenta",    # Restart
+            "state_8": "salmon",     # Depressurization
+        }
+        
         colors = {}
 
         def apply_transparency(color: str, opacity: float) -> str:
@@ -848,17 +868,34 @@ class ThreeWChart:
             r, g, b = int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255)
             return f"rgba({r}, {g}, {b}, {opacity})"
 
-        for idx, (label, _) in enumerate(LABELS_DESCRIPTIONS.items()):
-            if label == 0:
-                base_color = "white"
+        # Apply global colors for all labels
+        for label, color in global_colors.items():
+            if isinstance(label, str) and label.startswith("state_"):
+                # Handle state labels
+                colors[label] = color
             else:
-                base_color = mcolors.rgb2hex(cmap(idx % cmap.N))
-            colors[label] = base_color
+                # Handle class labels
+                colors[label] = color
+                # Add transient version if applicable
+                if isinstance(label, int) and label > 0:
+                    transient_label = label + TRANSIENT_OFFSET
+                    colors[transient_label] = apply_transparency(color, opacity=0.4)
+        
+        # Add default colors for any other labels that might exist
+        cmap = plt.get_cmap("tab10")
+        for idx, (label, _) in enumerate(LABELS_DESCRIPTIONS.items()):
+            if label not in colors:
+                if label == 0:
+                    colors[label] = "lightgreen"  # Ensure Normal Operation is always light green
+                else:
+                    base_color = mcolors.rgb2hex(cmap(idx % cmap.N))
+                    colors[label] = base_color
 
-            transient_label = label + TRANSIENT_OFFSET
-            colors[transient_label] = (
-                "white" if label == 0 else apply_transparency(base_color, opacity=0.4)
-            )
+                    transient_label = label + TRANSIENT_OFFSET
+                    if transient_label not in colors:
+                        colors[transient_label] = (
+                            "lightgreen" if label == 0 else apply_transparency(base_color, opacity=0.4)
+                        )        
         return colors
 
     def _load_data(self) -> pd.DataFrame:
@@ -889,26 +926,38 @@ class ThreeWChart:
         ]
 
     def _get_background_shapes(self, df: pd.DataFrame) -> List[Dict]:
-        """Creates background shapes to highlight class transitions in the chart.
+        """Creates background shapes to highlight class and state transitions in the chart.
 
         Args:
-            df (pd.DataFrame): DataFrame containing the class data.
+            df (pd.DataFrame): DataFrame containing the class and state data.
 
         Returns:
             List[Dict]: List of shape dictionaries for Plotly.
         """
         shapes = []
         prev_class = None
+        prev_state = None
         start_idx = 0
 
         for i in range(len(df)):
             current_class = df.iloc[i]["class"]
+            current_state = df.iloc[i]["state"] if "state" in df.columns else None
 
             if pd.isna(current_class):
                 print(f"Warning: NaN class value at index {i}")
                 continue
 
-            if prev_class is not None and current_class != prev_class:
+            # Check for transitions in class or state
+            class_changed = prev_class is not None and current_class != prev_class
+            state_changed = prev_state is not None and current_state != prev_state and current_state is not None
+
+            if class_changed or state_changed:
+                # Determine which color to use (prioritize state if available)
+                if prev_state is not None and f"state_{prev_state}" in self.class_colors:
+                    fill_color = self.class_colors.get(f"state_{prev_state}", "white")
+                else:
+                    fill_color = self.class_colors.get(prev_class, "white")
+                
                 shapes.append(
                     dict(
                         type="rect",
@@ -918,7 +967,7 @@ class ThreeWChart:
                         y1=1,
                         xref="x",
                         yref="paper",
-                        fillcolor=self.class_colors.get(prev_class, "white"),
+                        fillcolor=fill_color,
                         opacity=0.2,
                         line_width=0,
                     )
@@ -926,8 +975,16 @@ class ThreeWChart:
                 start_idx = i
 
             prev_class = current_class
+            prev_state = current_state
 
+        # Add final shape
         if prev_class is not None:
+            # Determine which color to use for the final segment
+            if prev_state is not None and f"state_{prev_state}" in self.class_colors:
+                fill_color = self.class_colors.get(f"state_{prev_state}", "white")
+            else:
+                fill_color = self.class_colors.get(prev_class, "white")
+                
             shapes.append(
                 dict(
                     type="rect",
@@ -937,7 +994,7 @@ class ThreeWChart:
                     y1=1,
                     xref="x",
                     yref="paper",
-                    fillcolor=self.class_colors.get(prev_class, "white"),
+                    fillcolor=fill_color,
                     opacity=0.2,
                     line_width=0,
                 )
@@ -945,13 +1002,15 @@ class ThreeWChart:
 
         return shapes
 
-    def _add_custom_legend(self, fig: go.Figure, present_classes: List[int]) -> None:
-        """Adds a custom legend to the chart for only those classes present in the data.
+    def _add_custom_legend(self, fig: go.Figure, present_classes: List[int], present_states: List[int] = None) -> None:
+        """Adds a custom legend to the chart for classes and states present in the data.
 
         Args:
             fig (go.Figure): The Plotly figure to which the legend will be added.
             present_classes (List[int]): The unique class values present in the DataFrame.
+            present_states (List[int], optional): The unique state values present in the DataFrame.
         """
+        # Add class legends
         for class_value in present_classes:
             if class_value in self.class_mapping:
                 event_name = self.class_mapping[class_value]
@@ -965,10 +1024,38 @@ class ThreeWChart:
                             color=self.class_colors.get(class_value, "white"),
                             line=dict(width=1, color="black"),
                         ),
-                        name=f"{class_value} - {event_name}",
+                        name=f"Class {class_value} - {event_name}",
                         showlegend=True,
                     )
                 )
+        
+        # Add state legends if states are present
+        if present_states:
+            state_names = {
+                0: "Open",
+                1: "Shut-In", 
+                7: "Restart",
+                8: "Depressurization"
+            }
+            
+            for state_value in present_states:
+                state_key = f"state_{state_value}"
+                if state_key in self.class_colors:
+                    state_name = state_names.get(state_value, f"State {state_value}")
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[None],
+                            y=[None],
+                            mode="markers",
+                            marker=dict(
+                                size=12,
+                                color=self.class_colors.get(state_key, "white"),
+                                line=dict(width=1, color="black"),
+                            ),
+                            name=f"State {state_value} - {state_name}",
+                            showlegend=True,
+                        )
+                    )
 
     def plot(self) -> None:
         """Generates and displays the interactive chart using Plotly.
@@ -979,6 +1066,7 @@ class ThreeWChart:
         df = self._load_data()
 
         present_classes = df["class"].dropna().unique().tolist()
+        present_states = df["state"].dropna().unique().tolist() if "state" in df.columns else None
 
         if self.use_dropdown:
             available_y_axes = self._get_non_zero_columns(df)
@@ -1040,5 +1128,5 @@ class ThreeWChart:
             ),
         )
 
-        self._add_custom_legend(fig, present_classes)
+        self._add_custom_legend(fig, present_classes, present_states)
         fig.show(config={"displaylogo": False})
