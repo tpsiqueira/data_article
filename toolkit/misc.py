@@ -1213,7 +1213,7 @@ class ThreeWChart:
         fig.show(config={"displaylogo": False})
 
 
-class CombinedThreeWChart:
+class ThreeWChart2:
     """
     Classe para criar gráficos combinados com múltiplas escalas Y
     Combina as 4 variáveis principais em um único gráfico
@@ -1426,3 +1426,203 @@ class CombinedThreeWChart:
         # Exibir gráfico
         fig.show(config={"displaylogo": False})
 
+class ThreeWChart3:
+    """
+    Classe para criar gráficos combinados com múltiplas escalas Y
+    Combina as 4 variáveis principais em um único gráfico
+    """
+    
+    def __init__(
+        self,
+        file_path: str,
+        title: str = "Combined ThreeW Chart",
+        variables: List[str] = None
+    ):
+        """
+        Inicializa a classe CombinedThreeWChart
+        
+        Args:
+            file_path (str): Caminho para o arquivo Parquet
+            title (str): Título do gráfico
+            variables (List[str]): Lista de variáveis a plotar
+        """
+        self.file_path = file_path
+        self.title = title
+        self.variables = variables or ["ABER-CKP", "P-MON-CKP", "P-PDG", "P-TPT"]
+        
+        # Configuração das cores para cada variável (linhas)
+        self.variable_colors = {
+            'ABER-CKP': '#ff7f0e',    # Laranja
+            'P-MON-CKP': '#1f77b4',   # Azul
+            'P-PDG': '#d62728',       # Vermelho
+            'P-TPT': '#2ca02c'        # Verde
+        }
+        
+        # Configuração das cores das escalas
+        self.scale_colors = {
+            '%': '#ff7f0e',    # Laranja para escala de % (esquerda)
+            'Pa': '#000000'    # Preto para escala de Pa (direita)
+        }
+        
+        # Configuração das escalas Y (apenas 2 escalas)
+        self.yaxis_config = {
+            'ABER-CKP': 'y',          # Escala esquerda (%)
+            'P-MON-CKP': 'y2',        # Escala direita (Pa)
+            'P-PDG': 'y2',            # Escala direita (Pa)
+            'P-TPT': 'y2'             # Escala direita (Pa)
+        }
+        
+        # Carregar unidades das variáveis
+        self.variable_units = self._get_variable_units()
+        
+        # Carregar dados
+        self.df = self._load_data()
+        
+        # Importar método de background shapes da classe original
+        from . import ThreeWChart
+        temp_chart = ThreeWChart(file_path=file_path)
+        self.class_colors = temp_chart.class_colors
+        self._get_background_shapes = temp_chart._get_background_shapes
+    
+    def _get_variable_units(self) -> Dict[str, str]:
+        """Extrai as unidades das variáveis do dataset.ini"""
+        
+        def extract_unit_from_description(description):
+            match = re.search(r'\[([^\]]+)\]', description)
+            if match:
+                unit = match.group(1)
+                if unit == "%%": return "%"
+                elif unit == "oC": return "°C"
+                else: return unit
+            return ""
+        
+        try:
+            # Tentar diferentes caminhos para o dataset.ini
+            possible_paths = [
+                "/home/ubuntu/data_article/dataset/dataset.ini",
+                "../../dataset/dataset.ini",
+                "../dataset/dataset.ini"
+            ]
+            
+            config = configparser.ConfigParser()
+            units = {}
+            
+            for path in possible_paths:
+                try:
+                    config.read(path)
+                    if 'PARQUET_FILE_PROPERTIES' in config:
+                        for variable, description in config['PARQUET_FILE_PROPERTIES'].items():
+                            if variable != 'timestamp':
+                                unit = extract_unit_from_description(description)
+                                units[variable.upper()] = unit
+                        break
+                except:
+                    continue
+            
+            return units
+        except Exception as e:
+            print(f"Erro ao carregar unidades: {e}")
+            return {}
+    
+    def _load_data(self) -> pd.DataFrame:
+        """Carrega e preprocessa os dados"""
+        
+        instance = (int(Path(self.file_path).parent.name), Path(self.file_path))
+        df = load_instance(instance)
+        df.reset_index(inplace=True)
+        df = df.dropna(subset=["timestamp"]).drop_duplicates("timestamp").fillna(0)
+        return df.sort_values(by="timestamp")
+    
+    def _create_yaxis_layout(self) -> Dict:
+        """Cria o layout com apenas 2 escalas Y (% e Pa)"""
+        
+        layout = {}
+        
+        # Configuração das 2 escalas Y
+        yaxis_configs = {
+            'yaxis': {  # Escala esquerda para % (ABER-CKP)
+                'title': f"Porcentagem (%)",
+                'title_font': {'color': self.scale_colors['%']},
+                'tickfont': {'color': self.scale_colors['%']},
+                'side': 'left'
+            },
+            'yaxis2': {  # Escala direita para Pa (P-MON-CKP, P-PDG, P-TPT)
+                'title': f"Pressão (Pa)",
+                'title_font': {'color': self.scale_colors['Pa']},
+                'tickfont': {'color': self.scale_colors['Pa']},
+                'side': 'right',
+                'overlaying': 'y'
+            }
+        }
+        
+        layout.update(yaxis_configs)
+        return layout
+    
+    def _add_variable_trace(self, fig: go.Figure, variable: str) -> None:
+        """Adiciona uma trace para uma variável específica"""
+        
+        if variable not in self.df.columns:
+            print(f"Variável {variable} não encontrada nos dados")
+            return
+        
+        yaxis = self.yaxis_config.get(variable, 'y')
+        color = self.variable_colors.get(variable, '#000000')
+        
+        fig.add_trace(
+            go.Scatter(
+                x=self.df['timestamp'],
+                y=self.df[variable],
+                mode='lines',
+                name=variable,
+                line=dict(color=color, width=2),
+                yaxis=yaxis,
+                showlegend=True
+            )
+        )
+    
+    def _add_background_shapes(self, fig: go.Figure) -> None:
+        """Adiciona as shapes de fundo (classes e estados)"""
+        
+        try:
+            shapes = self._get_background_shapes(self.df)
+            fig.update_layout(shapes=shapes)
+        except Exception as e:
+            print(f"Erro ao adicionar background shapes: {e}")
+    
+    def plot(self) -> None:
+        """Gera e exibe o gráfico combinado"""
+        
+        # Criar figura base
+        fig = go.Figure()
+        
+        # Adicionar traces para cada variável
+        for variable in self.variables:
+            self._add_variable_trace(fig, variable)
+        
+        # Configurar layout com múltiplas escalas Y
+        yaxis_layout = self._create_yaxis_layout()
+        
+        fig.update_layout(
+            title=self.title,
+            xaxis_title="",  # Sem título no eixo X
+            **yaxis_layout,
+            legend=dict(
+                x=1.15, 
+                y=1, 
+                title="Variáveis",
+                itemclick=False, 
+                itemdoubleclick=False
+            ),
+            margin=dict(l=100, r=150, t=50, b=50),  # Margens para acomodar escalas
+            width=1200,
+            height=600
+        )
+        
+        # Adicionar background shapes (classes e estados)
+        self._add_background_shapes(fig)
+        
+        # Remover barra de navegação
+        fig.update_xaxes(rangeslider_visible=False)
+        
+        # Exibir gráfico
+        fig.show(config={"displaylogo": False})
