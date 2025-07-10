@@ -9,12 +9,16 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
 import os
+import configparser
+import re
 
 from matplotlib.patches import Patch
 from pathlib import Path
 from multiprocessing.dummy import Pool as ThreadPool
 from collections import defaultdict
 from natsort import natsorted
+from typing import Dict, List
+from plotly.subplots import make_subplots
 
 import warnings
 
@@ -39,6 +43,8 @@ from .base import (
     PARQUET_EXTENSION,
     PARQUET_ENGINE,
 )
+
+
 
 
 # Methods
@@ -928,6 +934,9 @@ class ThreeWChart:
 
     def _get_background_shapes(self, df: pd.DataFrame) -> List[Dict]:
         """Creates background shapes to highlight class and state transitions in the chart.
+        Creates two layers: 50% bottom for classes, 50% top for states.
+        
+        Special handling for Figura 7: Maps states to artificial classes in bottom layer.
 
         Args:
             df (pd.DataFrame): DataFrame containing the class and state data.
@@ -936,39 +945,58 @@ class ThreeWChart:
             List[Dict]: List of shape dictionaries for Plotly.
         """
         shapes = []
+        
+        # Check if this is Figura 7 (DRAWN_00007.parquet)
+        is_figura7 = "DRAWN_00007" in str(self.file_path)
+        
+        if is_figura7:
+            # Special handling for Figura 7: Create artificial classes based on states
+            df_modified = df.copy()
+            
+            # Map states to artificial classes for bottom layer
+            state_to_class_mapping = {
+                0: 0,    # Open -> Normal Operation (lightgreen)
+                1: 108,  # Shut-In -> Transient Condition (yellow)
+                7: 0,    # Restart -> Normal Operation (will be overridden by state_0 in top layer)
+                8: 108,  # Depressurization -> Transient Condition (yellow)
+            }
+            
+            # Apply state-to-class mapping
+            for idx, row in df_modified.iterrows():
+                if 'state' in row and not pd.isna(row['state']):
+                    state_val = int(row['state'])
+                    if state_val in state_to_class_mapping:
+                        df_modified.loc[idx, 'class'] = state_to_class_mapping[state_val]
+            
+            # Use modified DataFrame for class shapes
+            df_for_classes = df_modified
+        else:
+            # Use original DataFrame for other figures
+            df_for_classes = df
+        
+        # Track transitions for classes (bottom layer)
         prev_class = None
-        prev_state = None
         start_idx = 0
 
-        for i in range(len(df)):
-            current_class = df.iloc[i]["class"]
-            current_state = df.iloc[i]["state"] if "state" in df.columns else None
+        for i in range(len(df_for_classes)):
+            current_class = df_for_classes.iloc[i]["class"]
 
             if pd.isna(current_class):
                 print(f"Warning: NaN class value at index {i}")
                 continue
 
-            # Check for transitions in class or state
-            class_changed = prev_class is not None and current_class != prev_class
-            state_changed = prev_state is not None and current_state != prev_state and current_state is not None
-
-            if class_changed or state_changed:
-                # Determine which color to use
-                # Priorizar cores de classe, usar cores de estado apenas para estados específicos
-                if prev_state is not None and prev_state != 0 and f"state_{prev_state}" in self.class_colors:
-                    # Usar cor de estado apenas para estados específicos (não state_0)
-                    fill_color = self.class_colors.get(f"state_{prev_state}", "white")
-                else:
-                    # Usar cor de classe (padrão)
-                    fill_color = self.class_colors.get(prev_class, "white")
+            # Check for class transitions
+            if prev_class is not None and current_class != prev_class:
+                # Create shape for previous class segment (bottom 50%)
+                fill_color = self.class_colors.get(prev_class, "white")
                 
                 shapes.append(
                     dict(
                         type="rect",
-                        x0=df.iloc[start_idx]["timestamp"],
-                        x1=df.iloc[i - 1]["timestamp"],
-                        y0=0,
-                        y1=1,
+                        x0=df_for_classes.iloc[start_idx]["timestamp"],
+                        x1=df_for_classes.iloc[i - 1]["timestamp"],
+                        y0=0,      # Bottom layer: 0% to 50%
+                        y1=0.5,
                         xref="x",
                         yref="paper",
                         fillcolor=fill_color,
@@ -979,26 +1007,18 @@ class ThreeWChart:
                 start_idx = i
 
             prev_class = current_class
-            prev_state = current_state
 
-        # Add final shape
+        # Add final class shape (bottom layer)
         if prev_class is not None:
-            # Determine which color to use for the final segment
-            # Priorizar cores de classe, usar cores de estado apenas para estados específicos
-            if prev_state is not None and prev_state != 0 and f"state_{prev_state}" in self.class_colors:
-                # Usar cor de estado apenas para estados específicos (não state_0)
-                fill_color = self.class_colors.get(f"state_{prev_state}", "white")
-            else:
-                # Usar cor de classe (padrão)
-                fill_color = self.class_colors.get(prev_class, "white")
+            fill_color = self.class_colors.get(prev_class, "white")
                 
             shapes.append(
                 dict(
                     type="rect",
-                    x0=df.iloc[start_idx]["timestamp"],
-                    x1=df.iloc[len(df) - 1]["timestamp"],
-                    y0=0,
-                    y1=1,
+                    x0=df_for_classes.iloc[start_idx]["timestamp"],
+                    x1=df_for_classes.iloc[len(df_for_classes) - 1]["timestamp"],
+                    y0=0,      # Bottom layer: 0% to 50%
+                    y1=0.5,
                     xref="x",
                     yref="paper",
                     fillcolor=fill_color,
@@ -1006,6 +1026,60 @@ class ThreeWChart:
                     line_width=0,
                 )
             )
+
+        # Track transitions for states (top layer)
+        if "state" in df.columns:
+            prev_state = None
+            start_idx = 0
+
+            for i in range(len(df)):
+                current_state = df.iloc[i]["state"]
+
+                if pd.isna(current_state):
+                    continue
+
+                # Check for state transitions
+                if prev_state is not None and current_state != prev_state:
+                    # Create shape for previous state segment (top 50%)
+                    if f"state_{prev_state}" in self.class_colors:
+                        fill_color = self.class_colors.get(f"state_{prev_state}", "white")
+                        
+                        shapes.append(
+                            dict(
+                                type="rect",
+                                x0=df.iloc[start_idx]["timestamp"],
+                                x1=df.iloc[i - 1]["timestamp"],
+                                y0=0.5,    # Top layer: 50% to 100%
+                                y1=1,
+                                xref="x",
+                                yref="paper",
+                                fillcolor=fill_color,
+                                opacity=0.2,
+                                line_width=0,
+                            )
+                        )
+                    start_idx = i
+
+                prev_state = current_state
+
+            # Add final state shape (top layer)
+            if prev_state is not None and f"state_{prev_state}" in self.class_colors:
+                fill_color = self.class_colors.get(f"state_{prev_state}", "white")
+                    
+                shapes.append(
+                    dict(
+                        type="rect",
+                        x0=df.iloc[start_idx]["timestamp"],
+                        x1=df.iloc[len(df) - 1]["timestamp"],
+                        y0=0.5,    # Top layer: 50% to 100%
+                        y1=1,
+                        xref="x",
+                        yref="paper",
+                        fillcolor=fill_color,
+                        opacity=0.2,
+                        line_width=0,
+                    )
+                )
 
         return shapes
 
@@ -1137,3 +1211,218 @@ class ThreeWChart:
 
         self._add_custom_legend(fig, present_classes, present_states)
         fig.show(config={"displaylogo": False})
+
+
+class CombinedThreeWChart:
+    """
+    Classe para criar gráficos combinados com múltiplas escalas Y
+    Combina as 4 variáveis principais em um único gráfico
+    """
+    
+    def __init__(
+        self,
+        file_path: str,
+        title: str = "Combined ThreeW Chart",
+        variables: List[str] = None
+    ):
+        """
+        Inicializa a classe CombinedThreeWChart
+        
+        Args:
+            file_path (str): Caminho para o arquivo Parquet
+            title (str): Título do gráfico
+            variables (List[str]): Lista de variáveis a plotar
+        """
+        self.file_path = file_path
+        self.title = title
+        self.variables = variables or ["ABER-CKP", "P-MON-CKP", "P-PDG", "P-TPT"]
+        
+        # Configuração das cores para cada variável
+        self.variable_colors = {
+            'ABER-CKP': '#1f77b4',    # Azul
+            'P-MON-CKP': '#ff7f0e',   # Laranja  
+            'P-PDG': '#2ca02c',       # Verde
+            'P-TPT': '#d62728'        # Vermelho
+        }
+        
+        # Configuração das escalas Y
+        self.yaxis_config = {
+            'ABER-CKP': 'y',          # Escala esquerda externa
+            'P-MON-CKP': 'y2',        # Escala esquerda interna
+            'P-PDG': 'y3',            # Escala direita interna
+            'P-TPT': 'y4'             # Escala direita externa
+        }
+        
+        # Carregar unidades das variáveis
+        self.variable_units = self._get_variable_units()
+        
+        # Carregar dados
+        self.df = self._load_data()
+        
+        # Importar método de background shapes da classe original
+        from . import ThreeWChart
+        temp_chart = ThreeWChart(file_path=file_path)
+        self.class_colors = temp_chart.class_colors
+        self._get_background_shapes = temp_chart._get_background_shapes
+    
+    def _get_variable_units(self) -> Dict[str, str]:
+        """Extrai as unidades das variáveis do dataset.ini"""
+        
+        def extract_unit_from_description(description):
+            match = re.search(r'\[([^\]]+)\]', description)
+            if match:
+                unit = match.group(1)
+                if unit == "%%": return "%"
+                elif unit == "oC": return "°C"
+                else: return unit
+            return ""
+        
+        try:
+            # Tentar diferentes caminhos para o dataset.ini
+            possible_paths = [
+                "/home/ubuntu/data_article/dataset/dataset.ini",
+                "../../dataset/dataset.ini",
+                "../dataset/dataset.ini"
+            ]
+            
+            config = configparser.ConfigParser()
+            units = {}
+            
+            for path in possible_paths:
+                try:
+                    config.read(path)
+                    if 'PARQUET_FILE_PROPERTIES' in config:
+                        for variable, description in config['PARQUET_FILE_PROPERTIES'].items():
+                            if variable != 'timestamp':
+                                unit = extract_unit_from_description(description)
+                                units[variable.upper()] = unit
+                        break
+                except:
+                    continue
+            
+            return units
+        except Exception as e:
+            print(f"Erro ao carregar unidades: {e}")
+            return {}
+    
+    def _load_data(self) -> pd.DataFrame:
+        """Carrega e preprocessa os dados"""
+        
+        instance = (int(Path(self.file_path).parent.name), Path(self.file_path))
+        df = load_instance(instance)
+        df.reset_index(inplace=True)
+        df = df.dropna(subset=["timestamp"]).drop_duplicates("timestamp").fillna(0)
+        return df.sort_values(by="timestamp")
+    
+    def _create_yaxis_layout(self) -> Dict:
+        """Cria o layout das múltiplas escalas Y"""
+        
+        layout = {}
+        
+        # Configuração das 4 escalas Y
+        yaxis_configs = {
+            'yaxis': {  # ABER-CKP - Esquerda externa
+                'title': f"ABER-CKP ({self.variable_units.get('ABER-CKP', '')})",
+                'title_font': {'color': self.variable_colors['ABER-CKP']},
+                'tickfont': {'color': self.variable_colors['ABER-CKP']},
+                'side': 'left',
+                'position': 0
+            },
+            'yaxis2': {  # P-MON-CKP - Esquerda interna
+                'title': f"P-MON-CKP ({self.variable_units.get('P-MON-CKP', '')})",
+                'title_font': {'color': self.variable_colors['P-MON-CKP']},
+                'tickfont': {'color': self.variable_colors['P-MON-CKP']},
+                'side': 'left',
+                'overlaying': 'y',
+                'position': 0.1
+            },
+            'yaxis3': {  # P-PDG - Direita interna
+                'title': f"P-PDG ({self.variable_units.get('P-PDG', '')})",
+                'title_font': {'color': self.variable_colors['P-PDG']},
+                'tickfont': {'color': self.variable_colors['P-PDG']},
+                'side': 'right',
+                'overlaying': 'y',
+                'position': 0.9
+            },
+            'yaxis4': {  # P-TPT - Direita externa
+                'title': f"P-TPT ({self.variable_units.get('P-TPT', '')})",
+                'title_font': {'color': self.variable_colors['P-TPT']},
+                'tickfont': {'color': self.variable_colors['P-TPT']},
+                'side': 'right',
+                'overlaying': 'y',
+                'position': 1
+            }
+        }
+        
+        layout.update(yaxis_configs)
+        return layout
+    
+    def _add_variable_trace(self, fig: go.Figure, variable: str) -> None:
+        """Adiciona uma trace para uma variável específica"""
+        
+        if variable not in self.df.columns:
+            print(f"Variável {variable} não encontrada nos dados")
+            return
+        
+        yaxis = self.yaxis_config.get(variable, 'y')
+        color = self.variable_colors.get(variable, '#000000')
+        
+        fig.add_trace(
+            go.Scatter(
+                x=self.df['timestamp'],
+                y=self.df[variable],
+                mode='lines',
+                name=variable,
+                line=dict(color=color, width=2),
+                yaxis=yaxis,
+                showlegend=True
+            )
+        )
+    
+    def _add_background_shapes(self, fig: go.Figure) -> None:
+        """Adiciona as shapes de fundo (classes e estados)"""
+        
+        try:
+            shapes = self._get_background_shapes(self.df)
+            fig.update_layout(shapes=shapes)
+        except Exception as e:
+            print(f"Erro ao adicionar background shapes: {e}")
+    
+    def plot(self) -> None:
+        """Gera e exibe o gráfico combinado"""
+        
+        # Criar figura base
+        fig = go.Figure()
+        
+        # Adicionar traces para cada variável
+        for variable in self.variables:
+            self._add_variable_trace(fig, variable)
+        
+        # Configurar layout com múltiplas escalas Y
+        yaxis_layout = self._create_yaxis_layout()
+        
+        fig.update_layout(
+            title=self.title,
+            xaxis_title="",  # Sem título no eixo X
+            **yaxis_layout,
+            legend=dict(
+                x=1.15, 
+                y=1, 
+                title="Variáveis",
+                itemclick=False, 
+                itemdoubleclick=False
+            ),
+            margin=dict(l=100, r=150, t=50, b=50),  # Margens para acomodar escalas
+            width=1200,
+            height=600
+        )
+        
+        # Adicionar background shapes (classes e estados)
+        self._add_background_shapes(fig)
+        
+        # Remover barra de navegação
+        fig.update_xaxes(rangeslider_visible=False)
+        
+        # Exibir gráfico
+        fig.show(config={"displaylogo": False})
+
