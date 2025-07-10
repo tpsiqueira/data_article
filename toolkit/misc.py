@@ -852,11 +852,13 @@ class ThreeWChart:
             0: "lightgreen",
             
             # Steady State labels - always red
+            2: "red",
             3: "red",
             6: "red", 
             8: "red",
             
             # Transient Condition labels - always yellow
+            102: "yellow",
             106: "yellow",
             108: "yellow",
             
