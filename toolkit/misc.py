@@ -805,7 +805,7 @@ class ThreeWChart:
         title: str = "ThreeW Chart",
         y_axis: str = "P-MON-CKP",
         use_dropdown: bool = False,
-        dropdown_position: tuple = (0.4, 1.4),        
+        dropdown_position: tuple = (0.4, 1.4),
     ):
         """Initializes the ThreeWChart class with the given parameters.
 
@@ -814,13 +814,13 @@ class ThreeWChart:
             title (str, optional): Title of the chart. Defaults to "ThreeW Chart".
             y_axis (str, optional): olumn name to be plotted on the y-axis. Defaults to "P-MON-CKP".
             use_dropdown (bool, optional):  Whether to show a dropdown for selecting the y-axis (default is False). Defaults to False.
-            dropdown_position (tuple, optional): Position of the dropdown button on the chart. Defaults to (0.4, 1.4).            
+            dropdown_position (tuple, optional): Position of the dropdown button on the chart. Defaults to (0.4, 1.4).
         """
         self.file_path: str = file_path
         self.title: str = title
         self.y_axis: str = y_axis
         self.use_dropdown: bool = use_dropdown
-        self.dropdown_position: tuple = dropdown_position        
+        self.dropdown_position: tuple = dropdown_position
 
         self.class_mapping: Dict[int, str] = self._generate_class_mapping()
         self.class_colors: Dict[int, str] = self._generate_class_colors()
@@ -834,23 +834,23 @@ class ThreeWChart:
         return {**LABELS_DESCRIPTIONS, **TRANSIENT_LABELS_DESCRIPTIONS}
 
     def _generate_class_colors(self) -> Dict[int, str]:
-       """Automatically generate a color mapping for event labels using a colormap.
-        For transient states, the color is the event color with lower opacity.
+        """Generate a color mapping for event labels with specific colors applied globally.
+        Colors are automatically applied based on the labels present in the data.
 
         Returns:
             Dict[int, str]: Mapping of event labels to their colors.
         """
         # Define global color mapping for all specific labels
         global_colors = {
-            # Normal Operation - light green
+            # Normal Operation - always light green
             0: "lightgreen",
             
-            # Steady State labels - red
+            # Steady State labels - always red
             3: "red",
             6: "red", 
             8: "red",
             
-            # Transient Condition labels - yellow
+            # Transient Condition labels - always yellow
             106: "yellow",
             108: "yellow",
             
@@ -895,7 +895,8 @@ class ThreeWChart:
                     if transient_label not in colors:
                         colors[transient_label] = (
                             "lightgreen" if label == 0 else apply_transparency(base_color, opacity=0.4)
-                        )        
+                        )
+        
         return colors
 
     def _load_data(self) -> pd.DataFrame:
@@ -952,10 +953,13 @@ class ThreeWChart:
             state_changed = prev_state is not None and current_state != prev_state and current_state is not None
 
             if class_changed or state_changed:
-                # Determine which color to use (prioritize state if available)
-                if prev_state is not None and f"state_{prev_state}" in self.class_colors:
+                # Determine which color to use
+                # Priorizar cores de classe, usar cores de estado apenas para estados específicos
+                if prev_state is not None and prev_state != 0 and f"state_{prev_state}" in self.class_colors:
+                    # Usar cor de estado apenas para estados específicos (não state_0)
                     fill_color = self.class_colors.get(f"state_{prev_state}", "white")
                 else:
+                    # Usar cor de classe (padrão)
                     fill_color = self.class_colors.get(prev_class, "white")
                 
                 shapes.append(
@@ -980,9 +984,12 @@ class ThreeWChart:
         # Add final shape
         if prev_class is not None:
             # Determine which color to use for the final segment
-            if prev_state is not None and f"state_{prev_state}" in self.class_colors:
+            # Priorizar cores de classe, usar cores de estado apenas para estados específicos
+            if prev_state is not None and prev_state != 0 and f"state_{prev_state}" in self.class_colors:
+                # Usar cor de estado apenas para estados específicos (não state_0)
                 fill_color = self.class_colors.get(f"state_{prev_state}", "white")
             else:
+                # Usar cor de classe (padrão)
                 fill_color = self.class_colors.get(prev_class, "white")
                 
             shapes.append(
@@ -1117,10 +1124,10 @@ class ThreeWChart:
                 )
             )
 
-        fig.update_xaxes(rangeslider_visible=True)
+        fig.update_xaxes(rangeslider_visible=False)
         fig.update_layout(
             shapes=self._get_background_shapes(df),
-            xaxis_title="Timestamp",
+            xaxis_title="",
             yaxis_title=self.y_axis if not self.use_dropdown else df[self.y_axis].name,
             title=self.title,
             legend=dict(
