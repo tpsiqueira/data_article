@@ -109,5 +109,6 @@ from .misc import (
     resample,
     plot_instance,
     ThreeWChart,
-    CombinedThreeWChart,
+    ThreeWChart2,
+    ThreeWChart3,
 )
