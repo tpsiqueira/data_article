@@ -1410,7 +1410,7 @@ class ThreeWChart2:
             legend=dict(
                 x=1.15, 
                 y=1, 
-                title="Variáveis",
+                title="Legend",
                 itemclick=False, 
                 itemdoubleclick=False
             ),
@@ -1611,7 +1611,7 @@ class ThreeWChart3:
             legend=dict(
                 x=1.15, 
                 y=1, 
-                title="Variáveis",
+                title="Legend",
                 itemclick=False, 
                 itemdoubleclick=False
             ),
