@@ -3,6 +3,12 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ignorar tudo em __pycache__ dentro de toolkit
+toolkit/__pycache__/
+toolkit/**/*.pyc
+toolkit/**/*.pyo
+toolkit/**/*.pyd
+
 # Jupyter Notebook checkpoint
 .ipynb_checkpoints
 */.ipynb_checkpoints/*
