@@ -1,31 +1,15 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 import matplotlib.colors as mcolors
 import os
 import configparser
 import re
-
-from matplotlib.patches import Patch
-from pathlib import Path
-from multiprocessing.dummy import Pool as ThreadPool
-from collections import defaultdict
-from natsort import natsorted
-from typing import Dict, List
-
-
 import warnings
-
-warnings.simplefilter("ignore", FutureWarning)
-import plotly.offline as py
-import plotly.graph_objs as go
-import glob
-import pandas as pd
-
-
 import plotly.graph_objects as go
-from typing import List, Dict
+
+from pathlib import Path
+from typing import Dict, List
 
 from .base import (
     COLUMNS_DATA_FILES,
@@ -39,6 +23,7 @@ from .base import (
     PARQUET_ENGINE,
 )
 
+warnings.simplefilter("ignore", FutureWarning)
 
 
 
