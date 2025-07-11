@@ -1,8 +1,3 @@
-"""This is the 3W Toolkit's miscellaneous sub-module.
-
-All resources that do not fit in the other sub-modules are define here.
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,7 +13,7 @@ from multiprocessing.dummy import Pool as ThreadPool
 from collections import defaultdict
 from natsort import natsorted
 from typing import Dict, List
-from plotly.subplots import make_subplots
+
 
 import warnings
 
@@ -27,7 +22,7 @@ import plotly.offline as py
 import plotly.graph_objs as go
 import glob
 import pandas as pd
-from tslearn.preprocessing import TimeSeriesScalerMeanVariance
+
 
 import plotly.graph_objects as go
 from typing import List, Dict
@@ -53,22 +48,6 @@ from .base import (
 
 
 def load_instance(instance):
-    """Loads all data and metadata from a specific `instance`.
-
-    Args:
-        instance (tuple): This tuple must refer to a specific `instance`
-            and contain its label (int) and its full path (Path).
-
-    Raises:
-        Exception: Error if the Parquet file passed as arg cannot be
-        read.
-
-    Returns:
-        pandas.DataFrame: Its index contains the timestamps loaded from
-            the Parquet file. Its columns contain data loaded from the
-            other columns of the Parquet file and metadata loaded from
-            the argument `instance` (label, well, and id).
-    """
     # Loads label metadata from the argument `instance`
     label, fp = instance
 
