@@ -1,9 +1,3 @@
-"""This 3W toolkits' sub-module groups objects used by the other
-sub-modules.
-
-Any resource that is not used by another sub-module must be maintained
-in the miscellaneous sub-module.
-"""
 
 import configparser
 import os
@@ -22,19 +16,6 @@ PATH_DATASET_INI = os.path.join(PATH_DATASET, "dataset.ini")
 # Methods
 #
 def load_config_in_dataset_ini():
-    """Loads all configurations present in the 3W Dataset's main
-    configuration file.
-
-    Raises:
-        Exception: Error if the configuration file is not found.
-        Exception: Error if the configuration file cannot be loaded.
-
-    Returns:
-        dict: Dict with all configurations present in the 3W Dataset's
-            main configuration file. This dict is formated with the
-            basic configuration language used by the configparser
-            module.
-    """
     # Check if the configuration file exists in the expected path
     if not exists(PATH_DATASET_INI):
         raise Exception(
@@ -107,17 +88,7 @@ PARQUET_COMPRESSION = parquet_settings.get("PARQUET_COMPRESSION")
 # Classes
 #
 class EventType:
-    """This class encapsulates properties (constants and default values)
-    for each type of event covered by the 3W Project."""
-
-    def __init__(self, event_name):
-        """Initializes an event.
-
-        Args:
-            event_name (srt): Event type name to be initialized. This
-                name must be a section name in the 3W Dataset's main
-                configuration file.
-        """
+    def __init__(self, event_name): 
         event_section = DATASET_INI.get(event_name)
         self.LABEL = event_section.getint("LABEL")
         self.OBSERVATION_LABELS = EVENT_NAMES_OBSERVATION_LABELS[event_name]
