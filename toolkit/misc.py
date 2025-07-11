@@ -387,7 +387,7 @@ class ThreeWChart:
             yaxis_title=self.y_axis if not self.use_dropdown else df[self.y_axis].name,
             title=self.title,
             legend=dict(
-                x=1.05, y=1, title="Legend", itemclick=False, itemdoubleclick=False
+                x=1.05, y=1, title="Variables", itemclick=False, itemdoubleclick=False
             ),
         )
 
@@ -409,7 +409,7 @@ class ThreeWChart2:
     def __init__(
         self,
         file_path: str,
-        title: str = "Combined ThreeW Chart",
+        title: str = "ThreeW Chart 2",
         variables: List[str] = None
     ):       
         self.file_path = file_path
@@ -571,7 +571,7 @@ class ThreeWChart2:
             legend=dict(
                 x=1.15, 
                 y=1, 
-                title="Legend",
+                title="Variables",
                 itemclick=False, 
                 itemdoubleclick=False
             ),
@@ -599,7 +599,7 @@ class ThreeWChart3:
     def __init__(
         self,
         file_path: str,
-        title: str = "Combined ThreeW Chart",
+        title: str = "ThreeW Chart 3",
         variables: List[str] = None
     ):   
         self.file_path = file_path
@@ -748,7 +748,7 @@ class ThreeWChart3:
             legend=dict(
                 x=1.15, 
                 y=1, 
-                title="Legend",
+                title="Variables",
                 itemclick=False, 
                 itemdoubleclick=False
             ),
