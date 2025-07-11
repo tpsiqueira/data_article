@@ -569,13 +569,16 @@ class ThreeWChart2:
             xaxis_title="",
             **yaxis_layout,
             legend=dict(
-                x=1.15, 
-                y=1, 
-                title="Variables",
+                orientation="h",
+                x=0.5, 
+                y=1.02,
+                xanchor="center",
+                yanchor="bottom", 
+                title="Variables:",
                 itemclick=False, 
                 itemdoubleclick=False
             ),
-            margin=dict(l=100, r=150, t=50, b=50),
+            margin=dict(l=100, r=150, t=80, b=50),
             width=1200,
             height=600
         )
@@ -622,7 +625,7 @@ class ThreeWChart3:
             'ABER-CKP': 'y',
             'P-MON-CKP': 'y2',
             'P-PDG': 'y2',
-            'P-TPT': 'y2'
+            'P-TPT': 'y2'   
         }
                 
         self.variable_units = self._get_variable_units()
@@ -748,7 +751,7 @@ class ThreeWChart3:
             legend=dict(
                 x=1.15, 
                 y=1, 
-                title="Variables",
+                title="Variables:",
                 itemclick=False, 
                 itemdoubleclick=False
             ),
