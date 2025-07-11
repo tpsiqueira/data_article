@@ -9,5 +9,5 @@ from .misc import (
     load_instance,  
     ThreeWChart,
     ThreeWChart2,
-    
+    ThreeWChart3,
 )

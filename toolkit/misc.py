@@ -594,3 +594,179 @@ class ThreeWChart2:
             }
         })
 
+class ThreeWChart3: 
+    
+    def __init__(
+        self,
+        file_path: str,
+        title: str = "Combined ThreeW Chart",
+        variables: List[str] = None
+    ):   
+        self.file_path = file_path
+        self.title = title
+        self.variables = variables or ["ABER-CKP", "P-MON-CKP", "P-PDG", "P-TPT"]
+                
+        self.variable_colors = {
+            'ABER-CKP': '#ff7f0e',    # Laranja
+            'P-MON-CKP': '#1f77b4',   # Azul
+            'P-PDG': '#d62728',       # Vermelho
+            'P-TPT': '#2ca02c'        # Verde
+        }
+                
+        self.scale_colors = {
+            '%': '#ff7f0e',
+            'Pa': '#000000'
+        }
+                
+        self.yaxis_config = {
+            'ABER-CKP': 'y',
+            'P-MON-CKP': 'y2',
+            'P-PDG': 'y2',
+            'P-TPT': 'y2'
+        }
+                
+        self.variable_units = self._get_variable_units()
+                
+        self.df = self._load_data()
+                
+        from . import ThreeWChart
+        temp_chart = ThreeWChart(file_path=file_path)
+        self.class_colors = temp_chart.class_colors
+        self._get_background_shapes = temp_chart._get_background_shapes
+    
+    def _get_variable_units(self) -> Dict[str, str]:        
+        
+        def extract_unit_from_description(description):
+            match = re.search(r'\[([^\]]+)\]', description)
+            if match:
+                unit = match.group(1)
+                if unit == "%%": return "%"
+                elif unit == "oC": return "°C"
+                else: return unit
+            return ""
+        
+        try:            
+            possible_paths = [                
+                "../../dataset/dataset.ini",
+                "../dataset/dataset.ini"
+            ]
+            
+            config = configparser.ConfigParser()
+            units = {}
+            
+            for path in possible_paths:
+                try:
+                    config.read(path)
+                    if 'PARQUET_FILE_PROPERTIES' in config:
+                        for variable, description in config['PARQUET_FILE_PROPERTIES'].items():
+                            if variable != 'timestamp':
+                                unit = extract_unit_from_description(description)
+                                units[variable.upper()] = unit
+                        break
+                except:
+                    continue
+            
+            return units
+        except Exception as e:
+            print(f"Erro ao carregar unidades: {e}")
+            return {}
+    
+    def _load_data(self) -> pd.DataFrame:        
+        
+        instance = (int(Path(self.file_path).parent.name), Path(self.file_path))
+        df = load_instance(instance)
+        df.reset_index(inplace=True)
+        df = df.dropna(subset=["timestamp"]).drop_duplicates("timestamp").fillna(0)
+        return df.sort_values(by="timestamp")
+    
+    def _create_yaxis_layout(self) -> Dict:        
+        layout = {}
+                
+        yaxis_configs = {
+            'yaxis': {
+                'title': f"Porcentagem (%)",
+                'title_font': {'color': self.scale_colors['%']},
+                'tickfont': {'color': self.scale_colors['%']},
+                'side': 'left'
+            },
+            'yaxis2': {
+                'title': f"Pressão (Pa)",
+                'title_font': {'color': self.scale_colors['Pa']},
+                'tickfont': {'color': self.scale_colors['Pa']},
+                'side': 'right',
+                'overlaying': 'y'
+            }
+        }
+        
+        layout.update(yaxis_configs)
+        return layout
+    
+    def _add_variable_trace(self, fig: go.Figure, variable: str) -> None:        
+        
+        if variable not in self.df.columns:
+            print(f"Variável {variable} não encontrada nos dados")
+            return
+        
+        yaxis = self.yaxis_config.get(variable, 'y')
+        color = self.variable_colors.get(variable, '#000000')
+        
+        fig.add_trace(
+            go.Scatter(
+                x=self.df['timestamp'],
+                y=self.df[variable],
+                mode='lines',
+                name=variable,
+                line=dict(color=color, width=2),
+                yaxis=yaxis,
+                showlegend=True
+            )
+        )
+    
+    def _add_background_shapes(self, fig: go.Figure) -> None:
+        """Adiciona as shapes de fundo (classes e estados)"""
+        
+        try:
+            shapes = self._get_background_shapes(self.df)
+            fig.update_layout(shapes=shapes)
+        except Exception as e:
+            print(f"Erro ao adicionar background shapes: {e}")
+    
+    def plot(self) -> None:
+        """Gera e exibe o gráfico combinado"""
+                
+        fig = go.Figure()
+                
+        for variable in self.variables:
+            self._add_variable_trace(fig, variable)
+                
+        yaxis_layout = self._create_yaxis_layout()
+        
+        fig.update_layout(
+            title=self.title,
+            xaxis_title="",
+            **yaxis_layout,
+            legend=dict(
+                x=1.15, 
+                y=1, 
+                title="Legend",
+                itemclick=False, 
+                itemdoubleclick=False
+            ),
+            margin=dict(l=100, r=150, t=50, b=50),
+            width=1200,
+            height=600
+        )
+                
+        self._add_background_shapes(fig)
+                
+        fig.update_xaxes(rangeslider_visible=False)
+                
+        fig.show(config={
+            "toImageButtonOptions": {
+                "format": "svg",  # padrão de exportação
+                "filename": self.title or "grafico",
+                "height": 600,
+                "width": 1200,
+                "scale": 1
+            }
+        })
