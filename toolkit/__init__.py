@@ -95,20 +95,9 @@ from .dev import (
 )
 
 # Imports and exposes objects from the 'misc' sub-module
-from .misc import (
-    calc_stats_instances,
-    count_properties_instance,
-    count_properties_instances,
-    create_and_plot_scatter_map,
-    create_table_of_instances,
-    filter_rare_undesirable_events,
-    get_all_labels_and_files,
-    label_and_file_generator,
-    load_instance,
-    load_instances,
-    resample,
-    plot_instance,
+from .misc import (  
+    load_instance,  
     ThreeWChart,
     ThreeWChart2,
-    ThreeWChart3,
+    
 )
