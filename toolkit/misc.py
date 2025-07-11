@@ -391,8 +391,17 @@ class ThreeWChart:
             ),
         )
 
-        self._add_custom_legend(fig, present_classes, present_states)
-        fig.show(config={"displaylogo": False})
+        self._add_custom_legend(fig, present_classes, present_states)        
+        fig.show(config={
+            "toImageButtonOptions": {
+                "format": "svg",  # padrão de exportação
+                "filename": self.title or "grafico",
+                "height": 600,
+                "width": 1200,
+                "scale": 1
+            }
+        })
+
 
 
 class ThreeWChart2:    
@@ -573,7 +582,15 @@ class ThreeWChart2:
                 
         self._add_background_shapes(fig)
                 
-        fig.update_xaxes(rangeslider_visible=False)
-                
-        fig.show(config={"displaylogo": False})
+        fig.update_xaxes(rangeslider_visible=False)                
+        
+        fig.show(config={
+            "toImageButtonOptions": {
+                "format": "svg",  # padrão de exportação
+                "filename": self.title or "grafico",
+                "height": 600,
+                "width": 1200,
+                "scale": 1
+            }
+        })
 
